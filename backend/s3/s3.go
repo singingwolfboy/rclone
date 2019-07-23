@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"regexp"
 	"strings"
@@ -1217,11 +1218,12 @@ func (f *Fs) list(ctx context.Context, bucket, directory, prefix string, addBuck
 	for {
 		// FIXME need to implement ALL loop
 		req := s3.ListObjectsInput{
-			Bucket:    &bucket,
-			Delimiter: &delimiter,
-			Prefix:    &directory,
-			MaxKeys:   &maxKeys,
-			Marker:    marker,
+			Bucket:       &bucket,
+			Delimiter:    &delimiter,
+			Prefix:       &directory,
+			MaxKeys:      &maxKeys,
+			Marker:       marker,
+			EncodingType: aws.String(s3.EncodingTypeUrl),
 		}
 		var resp *s3.ListObjectsOutput
 		var err error
@@ -1255,6 +1257,11 @@ func (f *Fs) list(ctx context.Context, bucket, directory, prefix string, addBuck
 					continue
 				}
 				remote := *commonPrefix.Prefix
+				remote, err = url.QueryUnescape(remote)
+				if err != nil {
+					fs.Logf(f, "failed to URL decode %q in listing common prefix: %v", *commonPrefix.Prefix, err)
+					continue
+				}
 				if !strings.HasPrefix(remote, prefix) {
 					fs.Logf(f, "Odd name received %q", remote)
 					continue
@@ -1274,6 +1281,11 @@ func (f *Fs) list(ctx context.Context, bucket, directory, prefix string, addBuck
 		}
 		for _, object := range resp.Contents {
 			remote := aws.StringValue(object.Key)
+			remote, err = url.QueryUnescape(remote)
+			if err != nil {
+				fs.Logf(f, "failed to URL decode %q in listing: %v", aws.StringValue(object.Key), err)
+				continue
+			}
 			if !strings.HasPrefix(remote, prefix) {
 				fs.Logf(f, "Odd name received %q", remote)
 				continue
