@@ -78,6 +78,26 @@ Note that this may cause rclone to confuse genuine HTML files with
 directories.`,
 			Default:  false,
 			Advanced: true,
+		}, {
+			Name: "no_head",
+			Help: `Don't use HEAD requests to find file sizes in dir listing
+
+If your site is being very slow to load then you can try this option.
+Normally rclone does a HEAD request for each potential file in a
+directory listing to:
+
+- find its size
+- check it really exists
+- check to see if it is a directory
+
+If you set this option, rclone will not do the HEAD request.  This will mean
+
+- directory listings are much quicker
+- rclone won't have the times or sizes of any files
+- some files that don't exist may be in the listing
+`,
+			Default:  false,
+			Advanced: true,
 		}},
 	}
 	fs.Register(fsi)
@@ -87,6 +107,7 @@ directories.`,
 type Options struct {
 	Endpoint string          `config:"url"`
 	NoSlash  bool            `config:"no_slash"`
+	NoHead   bool            `config:"no_head"`
 	Headers  fs.CommaSepList `config:"headers"`
 }
 
@@ -238,7 +259,7 @@ func (f *Fs) NewObject(ctx context.Context, remote string) (fs.Object, error) {
 		fs:     f,
 		remote: remote,
 	}
-	err := o.stat()
+	err := o.stat(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -432,7 +453,7 @@ func (f *Fs) List(ctx context.Context, dir string) (entries fs.DirEntries, err e
 					fs:     f,
 					remote: remote,
 				}
-				switch err = file.stat(); err {
+				switch err = file.stat(ctx); err {
 				case nil:
 					add(file)
 				case fs.ErrorNotAFile:
@@ -512,7 +533,13 @@ func (o *Object) url() string {
 }
 
 // stat uptdates the info field in the Object
-func (o *Object) stat() error {
+func (o *Object) stat(ctx context.Context) error {
+	if o.fs.opt.NoHead {
+		o.size = -1
+		o.modTime = timeUnset
+		o.contentType = fs.MimeType(ctx, o)
+		return nil
+	}
 	url := o.url()
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
