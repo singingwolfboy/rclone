@@ -350,6 +350,7 @@ func Copy(ctx context.Context, f fs.Fs, dst fs.Object, remote string, src fs.Obj
 						newDst = dst
 					} else {
 						in := tr.Account(in0).WithBuffer() // account and buffer the transfer
+						in.SetNoClose(true)
 						var wrappedSrc fs.ObjectInfo = src
 						// We try to pass the original object if possible
 						if src.Remote() != remote {
@@ -362,6 +363,7 @@ func Copy(ctx context.Context, f fs.Fs, dst fs.Object, remote string, src fs.Obj
 							actionTaken = "Copied (new)"
 							dst, err = f.Put(ctx, in, wrappedSrc, hashOption)
 						}
+						in.SetNoClose(false)
 						closeErr := in.Close()
 						if err == nil {
 							newDst = dst

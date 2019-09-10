@@ -4,6 +4,7 @@ package accounting
 import (
 	"fmt"
 	"io"
+	"runtime"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -44,6 +45,7 @@ type Account struct {
 	closed  bool          // set if the file is closed
 	exit    chan struct{} // channel that will be closed when transfer is finished
 	withBuf bool          // is using a buffered in
+	noClose bool          // if set then Close will just return nil
 }
 
 const averagePeriod = 16 // period to do exponentially weighted averages over
@@ -231,10 +233,26 @@ func (acc *Account) AccountRead(n int) (err error) {
 	return err
 }
 
+// SetNoClose is used to prevent Close being called when set to true.
+func (acc *Account) SetNoClose(noClose bool) {
+	acc.mu.Lock()
+	acc.noClose = noClose
+	acc.mu.Unlock()
+}
+
 // Close the object
 func (acc *Account) Close() error {
 	acc.mu.Lock()
 	defer acc.mu.Unlock()
+
+	if acc.noClose {
+		buf := make([]byte, 1024)
+		n := runtime.Stack(buf, false)
+		buf = buf[:n]
+		fs.Errorf(nil, "Attempted close at: %s", buf)
+		return nil
+	}
+
 	if acc.closed {
 		return nil
 	}
